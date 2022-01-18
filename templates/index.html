@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="cytoscape.min.js"></script>
+</head>
+<style>
+    #cy {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+
+        left: 0px;
+    }
+</style>
+<body>
+
+    
+    
+
+
+
+<!-- <form ><br> -->
+    mesage: <input type="text" id="message" contenteditable="true"/><br><br>
+    Input document corpus: <input type="file" name="inputfile" id="inputfile"><br>
+    Input json corpus: <input id="file" type="file" /> <br>
+    <br>
+    Get start of text: <input id="userstart" type="text" />  <button onclick="decodeStart()">decode start</button><br>
+    <div id="userStartDisplay"></div><br>
+    Type Corpus: <input type="text" id="corpus" contenteditable="true"/><br><br>
+    
+    <button onclick="initdata()">init data</button>
+    <button onclick="makeSentence()">make sentence</button>
+    <br>
+    
+    <button onclick="generateStart()">choose start</button>
+    <button onclick="makeSentenceWithInput(globalStr)">make sentence with input</button>
+    <select id="userChoose">
+    </select>   
+    <br>
+
+    <input type="text" id="decodeText" contenteditable="true"/>
+    <button onclick="decodeText()">decode text</button>
+    <button onclick="clearOutput()">clear output</button>
+    <table style="width: 50%; height: 50%;" border="1" cellpadding="5" contenteditable="true" id="userBoard">
+        <tbody>
+        <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        </tr>
+        <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        </tr>
+        <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        </tr>
+        <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        </tr>
+        <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        </tr>
+        </tbody>
+        </table>
+        <button onclick="setBoard()">set board</button>
+
+    <div id="myProgress" style="  width: 100%; background-color: grey;">
+        <div id="myBar" style="width: 1%; height: 30px; background-color: green;"></div>
+      </div>
+    <!--<div id="cy"></div>--> 
+    <div id="container"></div>
+
+    
+<!--</form> -->
+<p id="notification"></p>
+<p id="percent"></p>
+<div id="cy"></div>
+<script>
+    var corpus;
+    var boardPieces = [ ["a","b","c","d", "e","a"],
+            ["f","g","h","i", "j","e"],
+            ["k","l","m","n", "o"," "],
+            ["p","q","r","s", "t"," "],
+            ["u","v","w","x", "y","z"]]
+    var lookup={} 
+    var tree={}
+    var periodList=[]
+    const letterCombos={}
+    const commonDigraphs=['th','he','in','er','re','nd','at','on','nt','ha','es','st','en','ed','to','it','ou','ea','hi','is','or','ti','as','te','et','ng','of','al','de','se','le','sa','si','ar','ve','ra','ld','ur','ee','aa']
+    var globalStr=''
+    var globalCount=0
+    console.log('in script')
+    initBoard();
+    document.getElementById('inputfile')
+            .addEventListener('change', function() {
+              
+            var fr=new FileReader();
+            fr.onload=function(){
+                corpus=fr.result;
+                       //text=fr.result; 
+            }
+              
+            fr.readAsText(this.files[0]);
+        })
+        document.getElementById('file').addEventListener('change' ,function() {
+
+            var fr=new FileReader();
+            fr.onload=function(){
+                var tempObj=JSON.parse(fr.result)
+                tree= tempObj['treeTable']
+                periodList= tempObj['periodKey']
+                console.log(tree)
+                console.log(periodList)
+                       //text=fr.result; 
+            }
+              
+            fr.readAsText(this.files[0]);
+
+        })   
+function initBoard() {
+    var table = document.getElementById('userBoard');
+    for (var r = 0, n = table.rows.length; r < n; r++) {
+        for (var c = 0, m = table.rows[r].cells.length; c < m; c++) {
+            //console.log(table.rows[r].cells[c].innerHTML);
+            table.rows[r].cells[c].innerHTML=boardPieces[r][c]
+        }
+    }
+}        
+
+function setBoard() {
+    var table = document.getElementById('userBoard');
+    for (var r = 0, n = table.rows.length; r < n; r++) {
+        for (var c = 0, m = table.rows[r].cells.length; c < m; c++) {
+            console.log(table.rows[r].cells[c].innerHTML);
+            var c= table.rows[r].cells[c].innerHTML;
+            if(c.length>1){
+                console.log('error')
+                return;
+            }
+            //boardPieces[i][j]=c
+        }
+    }
+    for (var r = 0, n = table.rows.length; r < n; r++) {
+        for (var c = 0, m = table.rows[r].cells.length; c < m; c++) {
+            console.log(table.rows[r].cells[c].innerHTML);
+            var c= table.rows[r].cells[c].innerHTML;
+            if(c.length>1){
+                console.log('error')
+                return;
+            }
+            boardPieces[r][c]=c
+        }
+    }
+    console.log(boardPieces)
+}        
+
+function reformKey(str){
+    var list1= str.split(',')
+    //if( list1.length==2)  return  list1;
+    list1= list1.filter(function(item) {
+    return item !== ''
+  })
+  return list1
+
+   
+    
+
+
+}    
+
+function randomChoice(arr) {
+    return arr[Math.floor(arr.length * Math.random())];
+}
+function fitsLetter(str,chr){
+    //console('str ',str,' chr ',chr)
+    if (str.length==0   ){ return false}
+    var l= str.length
+    /*console.log('str is')
+    console.log(str)
+    console.log('chr is')
+    console.log(chr)
+    console.log('l is ')
+    console.log(l)*/
+    var w=str.charCodeAt(0) - 96
+    /*console.log('w is ')
+    console.log(w)*/
+    if( [w,l] in lookup){
+        var tok= lookup[[w,l]]
+        if( tok == chr){
+            //console.log('returning true')
+            return true
+        }
+
+
+    }
+    else{
+
+        return false
+    }
+    /*if (w,l) not in lookup:
+        return False
+    tok= lookup[(w,l)]
+    if tok == chr:
+        return True
+    return False */ 
+}
+function decodeLetter(str){
+    if (str.length==0   ){ return -1}
+    var l= str.length
+   var  w=str.charCodeAt(0) - 96
+   if( [w,l] in lookup){
+        var tok= lookup[[w,l]]
+        return tok
+   
+
+    }
+    else{
+
+        return -1
+    }
+
+
+
+}
+function notLetter(str){
+    if (str.length==0   ){ return true}
+    var l= str.length
+   var  w=str.charCodeAt(0) - 96
+   if( [w,l] in lookup){
+        var tok= lookup[[w,l]]
+        return false
+   
+
+    }
+    else{
+
+        return true
+    }
+
+
+
+}
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+function decodeStart(){
+    var userStart= document.getElementById("userstart").value;
+    console.log(userStart)
+    var textArea=document.getElementById('userStartDisplay')
+    // textArea.innerHTML += "Thank you for completing this form.<br><br>"
+    otherTemp=''
+    tempList=userStart.split(' ')
+    for(var p=0; p<tempList.length;p++){
+
+        if(decodeLetter(tempList[p])==-1){
+
+            continue
+        }
+        otherTemp=otherTemp+decodeLetter(tempList[p])
+    }
+    console.log('other temp is')
+    console.log(otherTemp)
+    textArea.innerHTML =''
+    textArea.innerHTML+= otherTemp+'<br>'
+    if( [tempList[tempList.length-2],tempList[tempList.length-1]] in tree){
+        textArea.innerHTML+='success<br>'
+
+    }else{
+        textArea.innerHTML+='failure<br>'
+
+
+    }
+    
+
+
+
+}
+function initdata(){
+
+                //["a","b","c","d", "e","a"]]
+               
+    var count=0
+    const map1 = new Map();
+    console.log(boardPieces.length)
+    console.log(boardPieces[0].length)
+    //return false
+    for(var i=0; i< boardPieces.length;i++){
+
+        for(var j=0; j<boardPieces[i].length;j++){
+            count=count+1
+            console.log(count)
+            lookup[[(i+1),(i+j+1)]]= boardPieces[i][j]
+            lookup[[(i+1)*6,(i+j+1)]]= boardPieces[i][j] 
+            //map.set() 
+
+
+        }
+    } 
+     
+    console.log(Object.keys(lookup))
+
+
+    var message= document.getElementById("message").value;
+    if(corpus.length==0){
+        corpus= document.getElementById("corpus").value;
+    }
+
+    var messageArr= message.split('')
+    console.log('message arr')
+    console.log(messageArr)
+
+    corpus=corpus.toLowerCase()
+    corpus=corpus.replace(/[^a-z\.]/gi, ' ')
+
+    console.log(corpus)
+    var words=corpus.split(' ')
+    var periodFlag=0
+    words = words.filter(function(item) {
+        return item !== ''
+    })
+    for (var i = 0; i < words.length - 3; i++){
+
+        if(words[i].indexOf('.')>0 && words[i+1]!='' && words[i+2] !=''){
+
+            //console.log(words[i])
+            periodFlag=1
+            periodList.push([words[i+1],words[i+2]])
+        }
+        
+    }
+    console.log(periodList)
+   
+    
+    corpus=corpus.replace(/[\.\,]/gi, ' ')
+    console.log(corpus)
+    //return;
+    //corpus=corpus.replace('.','')
+    //corpus=corpus.replace(',','')
+    //console=corpus.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"")
+    corpus=corpus.toLowerCase()
+     var textArea=document.getElementById('notification')
+     var textAreaPercent=document.getElementById('percent')
+     textArea.innerHTML += "Thank you for completing this form.<br><br>"
+     textArea.innerHTML += "The message you entered is " + message + "<br>"
+     //textArea.innerHTML += "The corpus  you entered is " + corpus +"<br>"
+
+     words=corpus.split(' ')
+     words = words.filter(function(item) {
+        return item !== ''
+    })
+
+     console.log(words)
+     var elem = document.getElementById("myBar");
+     /*var cy = cytoscape({
+        container: document.getElementById('cy'),
+        style: [
+					{
+						selector: 'node',
+						css: {
+							width: 50,
+							height: 50,
+							'background-color':'#61bffc',
+							content: 'data(id)'
+						}
+						
+					}
+        ],
+        elements: [
+         ]
+      });*/
+      
+      var renderStart=0;
+     
+
+     for (var i = 0; i < words.length - 3; i++) {
+                var tup1 = words[i];
+                var tup2 = words[i + 1];
+                var val = words[i + 2];
+                var val2 = words[i + 3];
+                //if(i>10000){
+                  //  break
+                //}
+                /*for (var i = 0; i < tup1.length; i++) {
+                    var c1=tup1.charAt(i)
+                    var c2= tup2.charAt(i)
+
+                    if ([c1,c2] in letterCombos){
+                        //console.log("in letterCombos")
+                    }
+                    else{
+                        letterCombos[[c1,c2]]= 1
+
+
+                    }
+
+                }*/
+                //console.log(Math.round(i*100/words.length))
+                if(Math.round(i*100/words.length) > (renderStart+10)){
+                    elem.style.width =  String(Math.round(i*100/words.length))+ "%";
+                    //console.log(String(Math.round(i*100/words.length))+ "%")
+                    textAreaPercent.innerHTML='<p>'+String(Math.round(i*100/words.length))+ "%"+'</p>'
+                }
+                if(tup1=='' || tup2=='' || tup1.includes('xx')  || tup2.includes('xx') || tup1.includes('xv')  || tup2.includes('xv') || val.includes('xx') || val.includes('xv') || val.includes('ix')){
+                    continue
+
+
+                }
+                if ([tup1,tup2] in tree){
+                    console.log("in tree")
+                }
+                else{
+                    tree[[tup1,tup2]]= {}
+
+
+                }
+                if (val in  tree[[tup1,tup2]] ){
+                    tree[[tup1,tup2]][val]= tree[[tup1,tup2]][val]+1
+
+
+                }else{
+      
+                        var  src =String([tup1,tup2]);
+                        var dest= String([val,val2]);
+                        tree[[tup1,tup2]][val]=1
+                        //if( !([tup1,tup2] in Object.keys(tree))){
+                            /*try {
+                                         
+                                    cy.add({
+                                        data: { id: src }
+                                        }
+                                    );
+                            } catch (error) {
+                  
+                            }
+
+                            
+
+               
+                        //}
+                        //if( !([val,val2] in Object.keys(tree))){
+           
+
+                            try {
+                                         
+                                cy.add({
+                                    data: { id: dest }
+                                    }
+                                );
+                            } catch (error) {
+                       
+                            }*/
+                        //}
+                        //if(i==0){ continue}
+            
+                        /*cy.add({
+                            data: {
+                                id: key,
+                                source: src,
+                                target: dest
+                            }
+                        });*/
+
+
+                }
+                
+
+
+                
+
+    }
+    //cy.layout({
+     //     name: 'circle'
+      //}).run();
+      //return;
+
+        var obj = {treeTable: tree, periodKey: periodList};
+        var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj));
+
+        var a = document.createElement('a');
+        a.href = 'data:' + data;
+        a.download = 'data.json';
+        a.innerHTML = 'download JSON';
+
+        var container = document.getElementById('container');
+        container.appendChild(a);
+      return;
+    }
+ function makeSentence(){   
+    console.log(boardPieces.length)
+    console.log(boardPieces[0].length)
+    //return false
+    for(var i=0; i< boardPieces.length;i++){
+
+        for(var j=0; j<boardPieces[i].length;j++){
+            //count=count+1
+            //console.log(count)
+            lookup[[(i+1),(i+j+1)]]= boardPieces[i][j]
+            lookup[[(i+1)*6,(i+j+1)]]= boardPieces[i][j] 
+            //map.set() 
+
+
+        }
+    } 
+    console.log(lookup)  
+    console.log(Object.keys(lookup))
+    var textArea=document.getElementById('notification')
+     var textAreaPercent=document.getElementById('percent')
+    var message= document.getElementById("message").value;
+
+
+    var messageArr= message.split('') 
+    console.log(tree)
+    console.log(Object.keys(tree))
+
+    var start = reformKey(randomChoice(Object.keys(tree)))
+    console.log('start is ')
+    console.log(start)
+    var lind=0
+    //while(String(start[0]).length<2 || String(start[1]).length<2 ||  Object.keys(tree[start]).length<3){
+    
+    /*for(var p=0; p<words.length;p++){
+        var letter=decodeLetter(words[p])
+        if (letter==-1){continue}
+        console.log(words[p])
+        
+        
+        console.log(letter)
+        console.log(fitsLetter(words[p],letter))
+        //console.log(fitsLetter(words[p],'a'))
+
+
+
+
+
+    }
+    tempRes=''
+    tempInd=0
+    while(tempInd<messageArr.length){
+        for(var p=0; p<words.length;p++){
+            if(fitsLetter(words[p],messageArr[tempInd])){
+
+                tempRes= tempRes+' '+words[p]
+                tempInd=tempInd+1
+            }
+        }
+
+
+    }
+    console.log('temp res is')
+    console.log(tempRes)
+    otherTemp=''
+    tempList=tempRes.split(' ')
+    for(var p=0; p<tempList.length;p++){
+
+        otherTemp=otherTemp+decodeLetter(tempList[p])
+    }
+    console.log('other temp is')
+    console.log(otherTemp)
+    return false*/
+    /*while(!fitsLetter(String(start[0]),messageArr[lind])){
+        start = reformKey(randomChoice(Object.keys(tree)))
+        console.log('start is ')
+        console.log(start)
+        console.log(String(start[0]).length)
+        console.log(String(start[1]).length)
+
+
+    }*/
+    var keyList=Object.keys(tree)
+    var startFlag=0
+    var newFlag=0
+    var periodStr=JSON.stringify(periodList)
+    if(keyList.length==0 || periodList.length==0){
+        return;
+    }
+    var cy = cytoscape({
+        container: document.getElementById('cy'),
+        style: [
+					{
+						selector: 'node',
+						css: {
+							width: 50,
+							height: 50,
+							'background-color':'#61bffc',
+							content: 'data(id)'
+						},
+                        
+						
+					},
+                    {selector: "node[type='big']",
+                    style: {
+                        'height': 150,
+                        'width': 150,
+                        'shape': 'roundrectangle'
+                        }},
+                    {selector: "node[type='little']",
+                    style: {
+                        'height': 50,
+                        'width': 80
+                        }},
+        ],
+        elements: [
+         ]
+      });
+    var res=''
+
+    var userStart= document.getElementById("userstart").value;  
+    if(userStart.length>0){
+        res=userStart
+        tempList=userStart.split(' ')
+        for(var p=0; p<tempList.length;p++){
+            var letter=decodeLetter(tempList[p])
+
+            if(letter==-1){
+
+                continue
+            }
+            else if( letter==messageArr[lind]){
+                    lind=lind+1
+            }
+        }
+        if( [tempList[tempList.length-2],tempList[tempList.length-1]] in tree){
+            //textArea.innerHTML+='success<br>'
+            start=[tempList[tempList.length-2],tempList[tempList.length-1]]
+            startFlag=1
+
+        }else{
+            //textArea.innerHTML+='failure<br>'
+
+
+        }
+
+
+    }
+    while(startFlag==0){
+        for(var p=0; p<keyList.length;p++){
+            
+            var tempStart=  reformKey(keyList[p])
+            //console.log(tempStart in periodList)
+            var c = periodStr.indexOf(JSON.stringify(tempStart));
+            if(c!=-1){
+                console.log(tempStart)
+
+
+            }else{
+
+                continue
+            }
+
+            var letter=decodeLetter(tempStart[0])
+            console.log(letter)
+            if((letter==messageArr[lind] || letter==' ' || tree[tempStart].length>5 || tempStart in periodList) && getRandomInt(10)>8 ){
+                start=tempStart
+                if( letter==messageArr[lind]){
+                    lind=lind+1
+                }
+                startFlag=1
+                res=res+start[0]+' '+start[1]
+                break
+
+
+
+            }
+            else if(newFlag==1 &&   tree[tempStart].length>5){
+                start=tempStart
+                startFlag=1
+                res=res+start[0]+' '+start[1]
+                break
+
+
+            }
+        } 
+        newFlag=1
+    }
+
+    console.log(start)
+    //try {
+                                         
+                cy.add({
+                    data: { id: String(start) }
+                    }
+                );
+      //  } catch (error) {
+
+        //}
+    //return;
+ 
+    //lind=lind+1
+
+
+    
+    var probList=[]
+    //res=res+start[0]+' '+start[1]
+    var fullcount=0
+    var charList= [decodeLetter(start[0]),decodeLetter(start[1])]
+    
+    //currentChar= messageArr[lind]
+    var wordList=[]
+    wordList.push(start[0])
+    wordList.push(start[1])
+    while(lind< messageArr.length && res.length<2000){
+            probList=[]
+            if( tree[start]==null  || res.length>(1000+fullcount)){
+                console.log('new start')
+                //break
+                //start = reformKey(randomChoice(Object.keys(tree)))
+                fullcount=fullcount+100
+                var keyList=Object.keys(tree)
+                for(var p=0; p<keyList.length;p++){
+                    var tempStart=  reformKey(keyList[p])
+                    var c = periodStr.indexOf(JSON.stringify(tempStart));
+                    if(c==-1){
+                        continue
+                    }
+                    if(res.indexOf(tempStart[0]+' '+tempStart[1])>-1){
+                        continue
+
+
+                    }
+                    var request = new XMLHttpRequest();
+                    request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+                    request.setRequestHeader("Content-Type", "application/json");
+                    var data = JSON.stringify({"string": String(tempStart[0]+' '+tempStart[1])});
+                    request.send(data);
+
+                    if (request.status === 200) {
+                        console.log(request.responseText);
+                        var json = JSON.parse(request.responseText);
+                        console.log(json.result);
+                        if(json.readAsText != 'orig'){
+                            continue
+                        }
+                        //textArea.innerHTML += "stego result is   " + json.result +"<br>"
+                    }
+                    
+                    var letter=decodeLetter(tempStart[0])
+                    if(letter==messageArr[lind] ){
+                        start=tempStart
+                        lind=lind+1
+                        break
+
+
+
+                    }
+                    else if(letter =='q'){
+                        start=tempStart
+                        break
+
+
+                    }
+                }
+                res=res+'. '+start[0]+' '+start[1]
+                charList.push(decodeLetter(start[0]))
+                charList.push(decodeLetter(start[1]))
+
+               try {
+                                         
+                                         cy.add({
+                                             data: { id: String(start) }
+                                             }
+                                         );
+                                 } catch (error) {
+                                    console.log(error)
+                         
+                }
+                continue
+                
+
+
+            }
+            for( var key in tree[start]){
+                console.log(key)
+                //if(String(res).indexOf(String(key))>0){
+
+                //    continue
+                //}
+                if(tree[[start[1],key]]==null || tree[[start[1],key]].length==0 ){
+                    continue
+
+                }
+                
+                var score = Math.min(Object.keys(tree[[start[1],key]]).length+ tree[start][key],150)
+                if(String(res).indexOf(String(key))>0){
+                    score=score-150
+
+                }
+                if(Object.keys(tree[[start[1],key]]).length==0){
+                    score=score-150
+
+                }
+                var tempScore=score
+                for(var nKey in tree[[start[1],key]] ){
+                    if(decodeLetter(key)==messageArr[lind] && decodeLetter(nKey)==messageArr[lind+1]){
+                        tempScore=(score+500)*100
+
+
+                    }
+                    
+                    else if(decodeLetter(nKey)==messageArr[lind]){
+
+                        tempScore=score+700
+                        //break
+                    }
+                    
+                    else if(decodeLetter(nKey)==-1||decodeLetter(nKey)=='v' || decodeLetter(nKey)=='w' || decodeLetter(nKey)=='x' ||decodeLetter(nKey)=='y'|| decodeLetter(nKey)=='q' ||  !messageArr.includes(decodeLetter(nKey))){
+
+                        tempScore=score+500
+                        //break
+                    }
+                  
+
+
+                }
+                score=tempScore
+
+                
+                /*if(wordList.filter(x => x === key).length >2 && key != 'the' && key !='a' && key !='to'){
+                    score=score-5*wordList.filter(x => x === key).length
+                    //continue
+
+
+                }*/
+                if(fitsLetter(key,messageArr[lind])){
+                    console.log('fits letter')
+
+                    score=(score+10)*4
+                }
+                else if(notLetter(key) && key.length>0){
+                    score=(score+2)*3
+
+                }
+                else if( decodeLetter(key)==-1  ||decodeLetter(key)=='v' || decodeLetter(key)=='w' || decodeLetter(key)=='x' ||decodeLetter(key)=='y'|| decodeLetter(key)=='q' || !messageArr.includes(decodeLetter(key))){
+
+                    score=score*2
+                }
+                
+                else if( !(String(charList[charList.length-1]+decodeLetter(key)) in commonDigraphs)){
+
+                    score=score*2
+                }
+                else{
+
+                    score=score-1000
+                }
+                var request = new XMLHttpRequest();
+                request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+                request.setRequestHeader("Content-Type", "application/json");
+                var data = JSON.stringify({"string": String(res+' '+key)});
+                request.send(data);
+
+                if (request.status === 200) {
+                    console.log(request.responseText);
+                    var json = JSON.parse(request.responseText);
+                    console.log(json.result);
+                    if(json.result != 'orig'){
+                        score=score-1500
+                    }
+                    //textArea.innerHTML += "stego result is   " + json.result +"<br>"
+                }
+                var origFlag=0
+                for(var nKey in tree[[start[1],key]] ){
+                    var classRes2=''
+                    var request = new XMLHttpRequest();
+                    request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+                    request.setRequestHeader("Content-Type", "application/json");
+                    var data = JSON.stringify({"string": String(res+' '+key+' '+nKey)});
+                    request.send(data);
+                    if (request.status === 200) {
+                        console.log(request.responseText);
+                        var json = JSON.parse(request.responseText);
+                        console.log(json.result);
+                        classRes2=json.result
+                        if(classRes2=='orig'){
+                            origFlag=1
+                        }
+                    }
+                }
+                if(origFlag==0){
+                    score=score-1500
+                }
+                
+                console.log(score)
+                probList.push([key,score])
+                /*var src= String(start)
+                var dest= String([start[1],key])
+                try {
+                                         
+                    cy.add({
+                        data: { id: dest  }
+                        }
+
+
+                    );
+                    cy.add({
+                            data: {
+                                id: key,
+                                source: src,
+                                target: dest
+                            }
+                        });
+                } catch (error) {
+                    console.log(error)
+    
+                }*/
+
+                   
+                //
+
+
+
+
+            }
+            console.log('prob list is ')
+            console.log(probList)
+            var maxPair=probList[0]
+            for(var i = 0; i < probList.length; i++){
+                var el = probList[i]
+                //console.log(el)
+                //if(String(res).includes(String(el[0]))){
+
+                    //continue
+                //}
+                if (el[1]>maxPair[1] || maxPair ==null || maxPair[0]==null || maxPair[1]==null){
+                    maxPair=el
+                    console.log('new max')
+
+                }
+
+
+            }
+            console.log('max pair is')
+            console.log(maxPair)
+
+                var src= String(start)
+                var dest= String([start[1],maxPair[0]])
+                try {
+                                         
+                    cy.add({
+                        data: { id: dest, type: 'big'   }
+                        }
+
+
+                    );
+                } catch (error) {
+                    console.log(error)
+    
+                }
+                try{
+                    cy.add({
+                            data: {
+                                id: maxPair[0],
+                                source: src,
+                                target: dest
+                            }
+                        });
+                        
+                } catch (error) {
+                    console.log(error)
+    
+                }
+            for(var i = 0; i < probList.length; i++){
+                var el = probList[i]
+                var src= String(start)
+                var dest= String([start[1],el[0]])
+                try {
+                                         
+                    cy.add({
+                        data: { id: dest, type: 'little'   }
+                        }
+
+
+                    );
+                } catch (error) {
+                    console.log(error)
+    
+                }
+                try{
+                    cy.add({
+                            data: {
+                                id: el[0],
+                                source: src,
+                                target: dest
+                            }
+                        });
+                        
+                } catch (error) {
+                    console.log(error)
+    
+                }
+            }    
+            start=[start[1],maxPair[0]]
+            console.log('start is')
+            console.log(start)
+            if(fitsLetter(start[1],messageArr[lind])){
+
+                lind=lind+1
+            }
+            res=res+' '+start[1]
+            wordList.push(start[1])
+            charList.push(decodeLetter(start[1]))
+            console.log('res is ')
+            console.log(res)
+            console.log('lind is')
+            console.log(lind)
+
+            try {
+                                         
+                                         cy.add({
+                                             data: { id: String(start) }
+                                             }
+                                         );
+                                 } catch (error) {
+                         
+            }
+
+    }
+    //print(res)
+    textArea.innerHTML += "The encoded medssage is:   " + res +"<br>"
+    otherTemp=''
+    tempList=res.split(' ')
+    for(var p=0; p<tempList.length;p++){
+
+        if(decodeLetter(tempList[p])==-1){
+
+            continue
+        }
+        otherTemp=otherTemp+decodeLetter(tempList[p])
+    }
+    console.log('other temp is')
+    console.log(otherTemp)
+    textArea.innerHTML += "decode is  " + otherTemp +"<br>"
+
+    var xhr = new XMLHttpRequest();
+    var url = "/checkString";
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            var json = JSON.parse(xhr.responseText);
+            console.log(json.result);
+            textArea.innerHTML += "stego result is   " + json.result +"<br>"
+        }
+    };
+    var data = JSON.stringify({"string": res});
+    xhr.send(data);
+
+    /*$.ajax({
+        method: "POST",
+        url: "/checkString",
+        data: { string: res },
+        dataType: 'json'
+        })
+        .done(function( msg ) {
+            alert( "Data Saved: " + msg );
+        });*/
+        var request = new XMLHttpRequest();
+        request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+        request.setRequestHeader("Content-Type", "application/json");
+        request.send(data);
+
+        if (request.status === 200) {
+            console.log(request.responseText);
+            var json = JSON.parse(request.responseText);
+            console.log(json.result);
+            textArea.innerHTML += "stego result is   " + json.result +"<br>"
+        }
+
+       cy.layout({
+          name: 'circle'
+      }).run();
+      cy.fit()
+      setTimeout( function(){
+        cy.reset();
+       }, 3000 );
+
+
+
+
+     return false;
+
+
+    }
+    function generateStart(){
+        var message= document.getElementById("message").value;
+
+
+        var messageArr= message.split('') 
+        var lind=0
+        console.log(tree)
+        console.log(Object.keys(tree))
+        var keyList=Object.keys(tree)
+        var periodStr=JSON.stringify(periodList)
+
+        var start = reformKey(randomChoice(Object.keys(tree)))
+        console.log('start is ')
+        console.log(start)
+        //var lind=0
+        var startFlag=0;
+        var count=0
+        var userSelect = document.getElementById('userChoose');
+        //for (var i=0; i<userSelect.length; i++) {
+          
+          //      userSelect.remove(i);
+        //}
+        while(userSelect.length>0){
+            userSelect.remove(0)
+        }
+        while(startFlag==0){
+        for(var p=0; p<keyList.length;p++){
+            
+            var tempStart=  reformKey(keyList[p])
+            var letter=decodeLetter(tempStart[0])
+            var letter2=decodeLetter(tempStart[1])
+            //console.log(tempStart in periodList)
+            /*var c = periodStr.indexOf(JSON.stringify(tempStart));
+            if(c!=-1){
+                console.log(tempStart)
+
+
+            }else{
+
+                continue
+            }*/
+
+            //var letter=decodeLetter(tempStart[0])
+            //console.log(letter)
+            
+           
+            if(tree[tempStart].length>1 || tempStart in periodList || letter==messageArr[lind] || letter==' ' || letter2==messageArr[lind] || letter2==' '|| letter!=-1 || letter2 !=-1){
+
+                /*start=tempStart
+                if( letter==messageArr[lind]){
+                    //lind=lind+1
+                }
+                startFlag=1
+                //res=res+start[0]+' '+start[1]
+                break
+
+
+
+            }
+            else if(newFlag==1 &&   tree[tempStart].length>5){
+                start=tempStart
+                startFlag=1
+                //res=res+start[0]+' '+start[1]
+                break
+
+
+            }*/
+        
+            //userSelect.options[userSelect.options.length] = new Option(String(tempStart), String(tempStart));
+            console.log('adding')
+            userSelect.options.add(new Option(String(tempStart)+' '+decodeLetter(tempStart[0])+' '+decodeLetter(tempStart[1]), tempStart));
+            startFlag=1
+            //count=count+1
+            //if(count>20){
+             //   break
+            //}
+        }
+    } 
+    
+        //newFlag=1
+
+    }
+    //return start;
+    globalStr=""
+
+
+    }
+    function makeSentenceWithInput(inputStr){
+        for(var i=0; i< boardPieces.length;i++){
+
+            for(var j=0; j<boardPieces[i].length;j++){
+                //count=count+1
+                //console.log(count)
+                lookup[[(i+1),(i+j+1)]]= boardPieces[i][j]
+                lookup[[(i+1)*6,(i+j+1)]]= boardPieces[i][j] 
+                //map.set() 
+
+
+            }
+        } 
+        var textArea=document.getElementById('notification')
+        var textAreaPercent=document.getElementById('percent')
+        var message= document.getElementById("message").value;
+
+        var userStart= document.getElementById("userstart").value;  
+        var userSelect = document.getElementById('userChoose');
+        if(userStart != null && userStart.length>0 && globalCount==0){
+            globalCount=1 
+            tempList=userStart.split(' ')
+            var tempStart=[tempList[tempList.length-2],tempList[tempList.length-1]]
+
+
+        }
+        else{
+            
+            console.log(userSelect.options[userSelect.selectedIndex].value)
+            var tempStart=  reformKey(userSelect.options[userSelect.selectedIndex].value)
+        }
+        
+        /*if(userStart.length>0){
+            res=userStart
+            tempList=userStart.split(' ')
+            for(var p=0; p<tempList.length;p++){
+                var letter=decodeLetter(tempList[p])
+
+                if(letter==-1){
+
+                    continue
+                }
+                else if( letter==messageArr[lind]){
+                        lind=lind+1
+                }
+            }
+            if( [tempList[tempList.length-2],tempList[tempList.length-1]] in tree){
+                //textArea.innerHTML+='success<br>'
+                start=[tempList[tempList.length-2],tempList[tempList.length-1]]
+                startFlag=1
+
+            }else{
+                //textArea.innerHTML+='failure<br>'
+
+
+            }
+
+
+        }*/
+        
+
+        if(tempStart[1] != undefined){inputStr=inputStr+' '+tempStart[0]+' '+tempStart[1]}
+        else{
+            inputStr=inputStr+' '+tempStart[0]
+
+        }
+        console.log(inputStr)
+
+
+        var messageArr= message.split('') 
+        res=''
+        var lind=0
+        if(inputStr.length>0){
+            res=inputStr
+            tempList=inputStr.split(' ')
+            for(var p=0; p<tempList.length;p++){
+                var letter=decodeLetter(tempList[p])
+
+                if(letter==-1){
+
+                    continue
+                }
+                else if( letter==messageArr[lind]){
+                        lind=lind+1
+                }
+            }
+            if( [tempList[tempList.length-2],tempList[tempList.length-1]] in tree){
+                //textArea.innerHTML+='success<br>'
+                start=[tempList[tempList.length-2],tempList[tempList.length-1]]
+                //startFlag=1
+
+            }else{
+                //textArea.innerHTML+='failure<br>'
+
+
+            }
+
+
+        }
+        //var userSelect = document.getElementById('userChoose');
+        //for (var i=0; i<userSelect.length; i++) {
+          
+          //      userSelect.remove(i);
+        //}
+        if(userSelect != undefined){
+            while(userSelect.length>0){
+                userSelect.remove(0);
+            }
+        }
+        var probList=[]
+        for( var key in tree[start]){
+                //console.log(key)
+                //if(String(res).indexOf(String(key))>0){
+
+                //    continue
+                //}
+                if(tree[[start[1],key]]==null || tree[[start[1],key]].length==0 ){
+                    continue
+
+                }
+                
+                var score = Math.min(Object.keys(tree[[start[1],key]]).length+ tree[start][key],150)
+                if(String(res).indexOf(String(key))>0){
+                    score=score-150
+
+                }
+                if(Object.keys(tree[[start[1],key]]).length==0){
+                    score=score-150
+
+                }
+                tempScore=score
+                for(var nKey in tree[[start[1],key]] ){
+                    if(decodeLetter(key)==messageArr[lind] && decodeLetter(nKey)==messageArr[lind+1]){
+                        tempScore=(score+500)*100
+
+
+                    }
+                    
+                    else if(decodeLetter(nKey)==messageArr[lind]){
+
+                        tempScore=score+700
+                        //break
+                    }
+                    
+                    else if(decodeLetter(nKey)==-1||decodeLetter(nKey)=='v' || decodeLetter(nKey)=='w' || decodeLetter(nKey)=='x' ||decodeLetter(nKey)=='y'|| decodeLetter(nKey)=='q' ||  !messageArr.includes(decodeLetter(nKey))){
+
+                        tempScore=score+100
+                        //break
+                    }
+                  
+
+
+                }
+                score=tempScore
+
+                
+                /*if(wordList.filter(x => x === key).length >2 && key != 'the' && key !='a' && key !='to'){
+                    score=score-5*wordList.filter(x => x === key).length
+                    //continue
+
+
+                }*/
+                if(fitsLetter(key,messageArr[lind])){
+                    console.log('fits letter')
+
+                    score=(score+10)*4
+                }
+                else if(notLetter(key) && key.length>0){
+                    score=score+100
+
+                }
+                else if( decodeLetter(key)==-1  ||decodeLetter(key)=='v' || decodeLetter(key)=='w' || decodeLetter(key)=='x' ||decodeLetter(key)=='y'|| decodeLetter(key)=='q' || !messageArr.includes(decodeLetter(key))){
+
+                    score=score+50
+                }
+                
+                /*else if( !(String(charList[charList.length-1]+decodeLetter(key)) in commonDigraphs)){
+
+                    score=score*2
+                }*/
+                else{
+
+                    score=score-1000
+                }
+                //userSelect.options.add(new Option(String(key)+' '+decodeLetter(key)+' '+score, key));
+                var classRes=''
+                var request = new XMLHttpRequest();
+                request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+                request.setRequestHeader("Content-Type", "application/json");
+                var data = JSON.stringify({"string": String(res+' '+key)});
+                request.send(data);
+
+                if (request.status === 200) {
+                    console.log(request.responseText);
+                    var json = JSON.parse(request.responseText);
+                    console.log(json.result);
+                    classRes=json.result
+                    if(classRes != 'orig'){
+                        score=score-1500
+                    }
+                    //textArea.innerHTML += "stego result is   " + json.result +"<br>"
+                }
+                var origFlag=0
+                for(var nKey in tree[[start[1],key]] ){
+                    var classRes2=''
+                    var request = new XMLHttpRequest();
+                    request.open('POST', '/checkString', false);  // `false` makes the request synchronous
+                    request.setRequestHeader("Content-Type", "application/json");
+                    var data = JSON.stringify({"string": String(res+' '+key+' '+nKey)});
+                    request.send(data);
+                    if (request.status === 200) {
+                        console.log(request.responseText);
+                        var json = JSON.parse(request.responseText);
+                        console.log(json.result);
+                        classRes2=json.result
+                        if(classRes2=='orig'){
+                            origFlag=1
+                        }
+                    }
+                }
+                if(origFlag==0){
+                    score=score-1500
+                }
+
+                console.log(score)
+                probList.push([key,score,classRes])
+        }
+        //probList.sort(function(a,b){return a[1] - b[1];}); 
+        probList.sort(function(a,b){return b[1] - a[1];}); 
+        for(var i = 0; i < probList.length; i++){
+            userSelect.options.add(new Option(String(probList[i][0])+' '+decodeLetter(probList[i][0])+' '+probList[i][1]+' '+probList[i][2],probList[i][0] ));
+        }
+        globalStr=res;
+        textArea.innerHTML=globalStr
+        otherTemp=''
+        tempList=globalStr.split(' ')
+        for(var p=0; p<tempList.length;p++){
+
+            if(decodeLetter(tempList[p])==-1){
+
+                continue
+            }
+            otherTemp=otherTemp+decodeLetter(tempList[p])
+        }
+        console.log('other temp is')
+        console.log(otherTemp)
+        textArea.innerHTML += "<br>decode is  " + otherTemp +"<br>"
+        var xhr = new XMLHttpRequest();
+        var url = "/checkString";
+        xhr.open("POST", url, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                var json = JSON.parse(xhr.responseText);
+                console.log(json.result);
+                textArea.innerHTML += "stego result is   " + json.result +"<br>"
+            }
+        };
+        var data = JSON.stringify({"string": res});
+        xhr.send(data);
+
+
+    }
+
+    //console.log(fitsLetter(start[1],messageArr[lind])
+    function decodeText(){
+        for(var i=0; i< boardPieces.length;i++){
+
+            for(var j=0; j<boardPieces[i].length;j++){
+                //count=count+1
+                //console.log(count)
+                lookup[[(i+1),(i+j+1)]]= boardPieces[i][j]
+                lookup[[(i+1)*6,(i+j+1)]]= boardPieces[i][j] 
+                //map.set() 
+
+
+            }
+        } 
+        var textArea=document.getElementById('notification')
+        var textAreaPercent=document.getElementById('percent')
+        var decode= document.getElementById("decodeText").value;
+        otherTemp=''
+        console.log(decode)
+        tempList=decode.split(' ')
+        for(var p=0; p<tempList.length;p++){
+            console.log(tempList[p]+' '+decodeLetter(tempList[p]))
+
+            if(decodeLetter(tempList[p])==-1){
+
+                continue
+            }
+            otherTemp=otherTemp+decodeLetter(tempList[p])
+        }
+        console.log('other temp is')
+        console.log(otherTemp)
+        textArea.innerHTML = "<br>decode is  " + otherTemp +"<br>"
+
+
+
+
+    }
+    function clearOutput(){
+
+        var textArea=document.getElementById('notification')
+        textArea.innerHTML=""
+    }
+    
+    </script>
+    
+
+</body>
+</html>
